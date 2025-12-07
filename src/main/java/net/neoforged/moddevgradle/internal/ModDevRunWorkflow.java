@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 import net.neoforged.minecraftdependencies.MinecraftDistribution;
 import net.neoforged.moddevgradle.dsl.InternalModelHelper;
 import net.neoforged.moddevgradle.dsl.ModModel;
+import net.neoforged.moddevgradle.dsl.RenderDoc;
 import net.neoforged.moddevgradle.dsl.RunModel;
 import net.neoforged.moddevgradle.internal.utils.ExtensionUtils;
 import net.neoforged.moddevgradle.internal.utils.VersionCapabilitiesInternal;
@@ -75,6 +76,7 @@ public class ModDevRunWorkflow {
             @Nullable ModuleDependency testFixturesDependency,
             ModuleDependency gameLibrariesDependency,
             DomainObjectCollection<RunModel> runs,
+            RenderDoc renderDoc,
             VersionCapabilitiesInternal versionCapabilities) {
         this.project = project;
         this.branding = branding;
@@ -163,7 +165,8 @@ public class ModDevRunWorkflow {
     public static ModDevRunWorkflow create(Project project,
             Branding branding,
             ModDevArtifactsWorkflow artifactsWorkflow,
-            DomainObjectCollection<RunModel> runs) {
+            DomainObjectCollection<RunModel> runs,
+            RenderDoc renderDoc) {
         var dependencies = artifactsWorkflow.dependencies();
         var versionCapabilites = artifactsWorkflow.versionCapabilities();
 
@@ -176,6 +179,7 @@ public class ModDevRunWorkflow {
                 dependencies.testFixturesDependency(),
                 dependencies.gameLibrariesDependency(),
                 runs,
+                renderDoc,
                 versionCapabilites);
 
         project.getExtensions().add(EXTENSION_NAME, workflow);
@@ -257,6 +261,12 @@ public class ModDevRunWorkflow {
                     supply -> supply ? List.of(dependencyFactory.create(RunUtils.DEV_LOGIN_GAV)) : List.of()));
         });
 
+        var supplyRenderDoc = project.provider(() -> runs.stream().anyMatch(model -> model.getRenderDoc().get()));
+        TaskProvider<DownloadRenderDocTask> downloadRenderDoc = project.getTasks().register("setupRenderDoc", DownloadRenderDocTask.class, renderDoc -> {
+            renderDoc.getRenderDocVersion().set(renderDocTools.getRenderDocVersion());
+            renderDoc.getRenderDocOutputDirectory().set(renderDocTools.getRenderDocPath().dir("download"));
+            renderDoc.getRenderDocInstallationDirectory().set(renderDocTools.getRenderDocPath().dir("installation"));
+        });
         // Create an empty task similar to "assemble" which can be used to generate all launch scripts at once
         var createLaunchScriptsTask = project.getTasks().register("createLaunchScripts", Task.class, task -> {
             task.setGroup(branding.publicTaskGroup());

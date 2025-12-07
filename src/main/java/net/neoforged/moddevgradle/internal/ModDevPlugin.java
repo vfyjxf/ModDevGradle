@@ -101,6 +101,7 @@ public class ModDevPlugin implements Plugin<Project> {
                 project,
                 Branding.MDG,
                 artifacts,
-                extension.getRuns());
+                extension.getRuns(),
+                extension.getRenderDoc());
     }
 }

@@ -159,7 +159,8 @@ public class LegacyForgeModDevPlugin implements Plugin<Project> {
                 project,
                 Branding.MDG,
                 artifacts,
-                extension.getRuns());
+                extension.getRuns(),
+                extension.getRenderDoc());
 
         // Configure the mixin and obfuscation extensions
         var mixin = ExtensionUtils.getExtension(project, MIXIN_EXTENSION, MixinExtension.class);

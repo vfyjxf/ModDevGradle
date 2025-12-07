@@ -24,6 +24,7 @@ public abstract class ModDevExtension {
     private final Project project;
     private final DataFileCollection accessTransformers;
     private final DataFileCollection interfaceInjectionData;
+    private final RenderDoc renderDoc;
 
     @Inject
     public ModDevExtension(Project project,
@@ -35,6 +36,7 @@ public abstract class ModDevExtension {
         this.project = project;
         this.accessTransformers = accessTransformers;
         this.interfaceInjectionData = interfaceInjectionData;
+        renderDoc = project.getObjects().newInstance(RenderDoc.class, project);
         getValidateAccessTransformers().convention(false);
 
         // Make sync tasks run
@@ -95,6 +97,14 @@ public abstract class ModDevExtension {
      * <b>Default</b> {@code false}<br>
      */
     public abstract Property<Boolean> getValidateAccessTransformers();
+
+    public RenderDoc getRenderDoc() {
+        return renderDoc;
+    }
+
+    public void renderDoc(Action<RenderDoc> action) {
+        action.execute(renderDoc);
+    }
 
     public NamedDomainObjectContainer<ModModel> getMods() {
         return mods;

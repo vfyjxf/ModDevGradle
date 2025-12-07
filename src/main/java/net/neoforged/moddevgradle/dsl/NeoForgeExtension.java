@@ -15,6 +15,7 @@ public abstract class NeoForgeExtension extends ModDevExtension {
 
     private final Project project;
     private final UnitTest unitTest;
+    private final RenderDoc renderDoc;
 
     @Inject
     public NeoForgeExtension(Project project, DataFileCollection accessTransformers, DataFileCollection interfaceInjectionData) {
@@ -22,6 +23,7 @@ public abstract class NeoForgeExtension extends ModDevExtension {
         this.project = project;
         unitTest = project.getObjects().newInstance(UnitTest.class);
         unitTest.getLoadedMods().convention(getMods());
+        this.renderDoc = project.getObjects().newInstance(RenderDoc.class);
     }
 
     /**
@@ -80,5 +82,13 @@ public abstract class NeoForgeExtension extends ModDevExtension {
 
     public void unitTest(Action<UnitTest> action) {
         action.execute(unitTest);
+    }
+
+    public RenderDoc getRenderDoc() {
+        return renderDoc;
+    }
+
+    public void renderDoc(Action<RenderDoc> action) {
+        action.execute(renderDoc);
     }
 }
