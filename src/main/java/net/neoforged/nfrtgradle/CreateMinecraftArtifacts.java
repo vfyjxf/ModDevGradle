@@ -6,7 +6,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import javax.inject.Inject;
+import net.neoforged.moddevgradle.internal.JarPostProcessor;
+import net.neoforged.moddevgradle.internal.utils.FileUtils;
 import net.neoforged.moddevgradle.internal.utils.ProblemReportingUtil;
 import net.neoforged.problems.FileProblemReporter;
 import net.neoforged.problems.Problem;
@@ -15,6 +18,7 @@ import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.problems.Problems;
+import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
@@ -114,6 +118,25 @@ public abstract class CreateMinecraftArtifacts extends NeoFormRuntimeTask {
     @Input
     @Optional
     public abstract Property<String> getParchmentConflictResolutionPrefix();
+
+    /**
+     * Path or Maven coordinates of a legacy MCP CSV mapping zip.
+     * <p>
+     * This is only used by NFRT processes for Minecraft versions before Mojang official mappings existed.
+     */
+    @Input
+    @Optional
+    public abstract Property<String> getLegacyMcpMappings();
+
+    /**
+     * Additional Maven repository URLs that NFRT should consult when resolving artifacts it needs to download
+     * itself (notably the Minecraft and Forge libraries used as the compile classpath during recompilation).
+     * NFRT's built-in defaults only cover the NeoForged Maven and the local Maven cache, which is insufficient for
+     * legacy versions whose libraries are spread across Maven Central, Mojang's library repository and the Forge Maven.
+     * Each entry is passed to NFRT using the {@code --repository} command line option.
+     */
+    @Input
+    public abstract ListProperty<String> getAdditionalRepositories();
 
     /**
      * This property can be used to access additional results of the NeoForm process being run by NFRT.
@@ -254,6 +277,13 @@ public abstract class CreateMinecraftArtifacts extends NeoFormRuntimeTask {
     @ApiStatus.Experimental
     public abstract Property<Boolean> getIncludeResourcesInGameJar();
 
+    /**
+     * Jar post-processors for legacy MCP versions (e.g. 1.12.2 Forge deobf data remapping).
+     * Registered by the mcpforge plugin; empty by default.
+     */
+    @Internal
+    public abstract ListProperty<JarPostProcessor> getJarPostProcessors();
+
     @Inject
     protected abstract Problems getProblems();
 
@@ -310,6 +340,19 @@ public abstract class CreateMinecraftArtifacts extends NeoFormRuntimeTask {
                 args.add("--parchment-conflict-prefix");
                 args.add(conflictResolutionPrefix);
             }
+        }
+
+        if (getLegacyMcpMappings().isPresent()) {
+            var legacyMcpMappings = getLegacyMcpMappings().get();
+            if (!legacyMcpMappings.isBlank()) {
+                args.add("--mcp-mappings");
+                args.add(legacyMcpMappings);
+            }
+        }
+
+        for (var repository : getAdditionalRepositories().get()) {
+            args.add("--repository");
+            args.add(repository);
         }
 
         if (!getEnableCache().get()) {
@@ -395,8 +438,72 @@ public abstract class CreateMinecraftArtifacts extends NeoFormRuntimeTask {
 
         try {
             run(args);
+            stripJarSignatures(requestedResults);
+            remapLegacyForgeMinecraftReferences(requestedResults, getJarPostProcessors().get());
+            removePreAppliedLegacyForgeRuntimePatches(requestedResults);
         } finally {
             reportProblems(problemsReport);
+        }
+    }
+
+    private static void removePreAppliedLegacyForgeRuntimePatches(List<RequestedResult> requestedResults) {
+        for (var requestedResult : requestedResults) {
+            var destination = requestedResult.destination();
+            if (!destination.isFile() || !destination.getName().endsWith(".jar")) {
+                continue;
+            }
+
+            try {
+                FileUtils.removeJarEntries(destination.toPath(), Set.of("binpatches.pack.lzma"));
+            } catch (IOException e) {
+                throw new GradleException("Failed to remove legacy Forge runtime patches from generated jar " + destination, e);
+            }
+        }
+    }
+
+    private static void remapLegacyForgeMinecraftReferences(List<RequestedResult> requestedResults, List<JarPostProcessor> postProcessors) {
+        if (postProcessors.isEmpty()) {
+            return;
+        }
+        for (var requestedResult : requestedResults) {
+            var destination = requestedResult.destination();
+            if (!destination.isFile() || !destination.getName().endsWith(".jar")) {
+                continue;
+            }
+
+            try {
+                for (var postProcessor : postProcessors) {
+                    postProcessor.process(
+                            destination.toPath(),
+                            findRequestedResult(requestedResults, "intermediaryToNamedMapping"));
+                }
+            } catch (IOException e) {
+                throw new GradleException("Failed to remap legacy Forge Minecraft references in generated jar " + destination, e);
+            }
+        }
+    }
+
+    private static java.nio.file.Path findRequestedResult(List<RequestedResult> requestedResults, String id) {
+        for (var requestedResult : requestedResults) {
+            if (requestedResult.id().equals(id) && requestedResult.destination().isFile()) {
+                return requestedResult.destination().toPath();
+            }
+        }
+        return null;
+    }
+
+    private static void stripJarSignatures(List<RequestedResult> requestedResults) {
+        for (var requestedResult : requestedResults) {
+            var destination = requestedResult.destination();
+            if (!destination.isFile() || !destination.getName().endsWith(".jar")) {
+                continue;
+            }
+
+            try {
+                FileUtils.stripJarSignatures(destination.toPath());
+            } catch (IOException e) {
+                throw new GradleException("Failed to strip signature metadata from generated jar " + destination, e);
+            }
         }
     }
 

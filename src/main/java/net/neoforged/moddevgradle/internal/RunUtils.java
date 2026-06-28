@@ -1,13 +1,17 @@
 package net.neoforged.moddevgradle.internal;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
@@ -157,6 +161,7 @@ final class RunUtils {
     public enum RunArgFile {
         VMARGS("runVmArgs.txt"),
         PROGRAMARGS("runProgramArgs.txt"),
+        ENVIRONMENT("runEnvironment.properties"),
         CLASSPATH("runClasspath.txt"),
         LOG4J_CONFIG("log4j2.xml");
 
@@ -169,6 +174,54 @@ final class RunUtils {
 
     public static String getArgFileParameter(RegularFile argFile) {
         return "@" + argFile.getAsFile().getAbsolutePath();
+    }
+
+    public static Map<String, String> loadEnvironmentFile(File file) throws IOException {
+        var properties = new Properties();
+        try (var input = new FileInputStream(file)) {
+            properties.load(input);
+        }
+
+        var environment = new LinkedHashMap<String, String>();
+        for (var name : properties.stringPropertyNames()) {
+            environment.put(name, properties.getProperty(name));
+        }
+        return environment;
+    }
+
+    public static List<String> readArgFile(File file) throws IOException {
+        var result = new ArrayList<String>();
+        for (var line : Files.readAllLines(file.toPath())) {
+            line = line.strip();
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue;
+            }
+            result.add(unescapeArgFileLine(line));
+        }
+        return result;
+    }
+
+    private static String unescapeArgFileLine(String line) {
+        if (line.length() >= 2 && line.startsWith("\"") && line.endsWith("\"")) {
+            line = line.substring(1, line.length() - 1);
+        }
+        var result = new StringBuilder(line.length());
+        boolean escaped = false;
+        for (int i = 0; i < line.length(); i++) {
+            var c = line.charAt(i);
+            if (escaped) {
+                result.append(c);
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else {
+                result.append(c);
+            }
+        }
+        if (escaped) {
+            result.append('\\');
+        }
+        return result.toString();
     }
 
     public static ModFoldersProvider getGradleModFoldersProvider(Project project, Provider<Set<ModModel>> modsProvider, Provider<ModModel> testedMod) {
@@ -199,9 +252,7 @@ final class RunUtils {
 
     /**
      * In the run model, the environment variable "MOD_CLASSES" is set to the gradle output folders by the legacy plugin,
-     * since MDG itself completely ignores run-type specific environment variables.
-     * To ensure that in IDE runs, the IDE output folders are used, we replace the MOD_CLASSES environment variable
-     * explicitly.
+     * and we replace it with the IDE output folders for IDE runs.
      */
     public static Map<String, String> replaceModClassesEnv(RunModel model, ModFoldersProvider modFoldersProvider) {
         var vars = model.getEnvironment().get();

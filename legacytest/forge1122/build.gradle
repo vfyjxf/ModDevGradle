@@ -1,0 +1,39 @@
+plugins {
+    id 'net.neoforged.moddev.legacyforge'
+}
+
+repositories {
+    // The Forge 1.12.2 smoke can use a locally published NFRT build until a compatible release is default.
+    mavenLocal()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(8)
+    }
+}
+
+neoFormRuntime {
+    version = '2.0.19-legacy'
+}
+
+legacyForge {
+    enable {
+        forgeVersion = '1.12.2-14.23.5.2860'
+        mcpMappings = 'de.oceanlabs.mcp:mcp_stable:39-1.12@zip'
+        // Recompilation now works end-to-end: NFRT runs ForgeFlower/MCPCleanup/recompile, with the legacy
+        // Java-8 toolchain auto-provisioned by Gradle (Azul Zulu on aarch64) and the legacy Maven repositories
+        // (Maven Central, Mojang libraries, Forge Maven) passed to NFRT via CreateMinecraftArtifacts.
+        disableRecompilation = false
+    }
+    runs {
+        client {
+            client()
+        }
+    }
+    mods {
+        mymod1122 {
+            sourceSet(sourceSets.main)
+        }
+    }
+}

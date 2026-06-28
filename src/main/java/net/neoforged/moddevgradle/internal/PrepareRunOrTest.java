@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Properties;
 import java.util.stream.Collectors;
 import java.util.zip.ZipFile;
 import net.neoforged.moddevgradle.internal.utils.FileUtils;
@@ -56,6 +57,9 @@ abstract class PrepareRunOrTest extends DefaultTask {
     @OutputFile
     public abstract RegularFileProperty getProgramArgsFile();
 
+    @OutputFile
+    public abstract RegularFileProperty getEnvironmentFile();
+
     /**
      * A file to use for the {@code log4j2.xml} config file that will be written.
      * If absent, the standard log4j2.xml file produced by {@link RunUtils#writeLog4j2Configuration} will be used.
@@ -100,6 +104,12 @@ abstract class PrepareRunOrTest extends DefaultTask {
     public abstract MapProperty<String, String> getSystemProperties();
 
     @Input
+    public abstract MapProperty<String, String> getUserEnvironment();
+
+    @Input
+    public abstract MapProperty<String, String> getRunTemplateReplacements();
+
+    @Input
     public abstract ListProperty<String> getJvmArguments();
 
     @Input
@@ -128,8 +138,11 @@ abstract class PrepareRunOrTest extends DefaultTask {
 
     protected PrepareRunOrTest(ProgramArgsFormat programArgsFormat) {
         this.programArgsFormat = programArgsFormat;
+        getInputs().property("gameDirectoryPath", getGameDirectory().map(directory -> directory.getAsFile().getAbsolutePath()));
         getVersionCapabilities().convention(VersionCapabilitiesInternal.latest());
         getDevLogin().convention(false);
+        getUserEnvironment().convention(Map.of());
+        getRunTemplateReplacements().convention(Map.of());
     }
 
     protected abstract UserDevRunType resolveRunType(UserDevConfig userDevConfig);
@@ -151,11 +164,18 @@ abstract class PrepareRunOrTest extends DefaultTask {
             }
             result.add(RunUtils.escapeJvmArg(arg));
         }
-        if (isClientDistribution() && OperatingSystem.current() == OperatingSystem.MACOS) {
+        if (isClientDistribution() && OperatingSystem.current() == OperatingSystem.MACOS && !usesLegacyAppleLwjgl2()) {
             // TODO: it might be more future-proof to source this from the platform args in the MC version json
             result.add("-XstartOnFirstThread");
         }
         return result;
+    }
+
+    private boolean usesLegacyAppleLwjgl2() {
+        var capabilities = getVersionCapabilities().get();
+        var arch = System.getProperty("os.arch");
+        return "1.12.2".equals(capabilities.minecraftVersion())
+                && ("aarch64".equals(arch) || "arm64".equals(arch));
     }
 
     @TaskAction
@@ -187,6 +207,31 @@ abstract class PrepareRunOrTest extends DefaultTask {
 
         writeJvmArguments(runConfig, sysProps);
         writeProgramArguments(runConfig, mainClass);
+        writeEnvironment(runConfig);
+        configureLegacyForgeSplash(runDir);
+    }
+
+    private void configureLegacyForgeSplash(File runDir) throws IOException {
+        if (!isClientDistribution()
+                || OperatingSystem.current() != OperatingSystem.MACOS
+                || !"1.12.2".equals(getVersionCapabilities().get().minecraftVersion())) {
+            return;
+        }
+
+        var splashConfig = runDir.toPath().resolve("config/splash.properties");
+        Files.createDirectories(splashConfig.getParent());
+
+        var properties = new Properties();
+        if (Files.isRegularFile(splashConfig)) {
+            try (var reader = Files.newBufferedReader(splashConfig, StandardCharsets.UTF_8)) {
+                properties.load(reader);
+            }
+        }
+        properties.setProperty("enabled", "false");
+
+        try (var writer = Files.newBufferedWriter(splashConfig, StandardCharsets.UTF_8)) {
+            properties.store(writer, "Splash screen properties");
+        }
     }
 
     private UserDevConfig loadUserDevConfig(File userDevFile) {
@@ -292,13 +337,9 @@ abstract class PrepareRunOrTest extends DefaultTask {
         }
 
         lines.add("# NeoForge Run-Type Program Arguments");
-        var assetProperties = DownloadedAssetsReference.loadProperties(getAssetProperties().get().getAsFile());
         List<String> args = runConfig.args();
         for (String arg : args) {
-            switch (arg) {
-                case "{assets_root}" -> arg = Objects.requireNonNull(assetProperties.assetsRoot(), "assets_root");
-                case "{asset_index}" -> arg = Objects.requireNonNull(assetProperties.assetIndex(), "asset_index");
-            }
+            arg = interpolateRunTemplateValue(arg);
 
             // FML JUnit simply expects one line per argument
             if (programArgsFormat == ProgramArgsFormat.FML_JUNIT) {
@@ -332,6 +373,37 @@ abstract class PrepareRunOrTest extends DefaultTask {
                 lines,
                 // FML Junit and DevLaunch (starting in 1.0.1) read this file using UTF-8
                 StandardCharsets.UTF_8);
+    }
+
+    private void writeEnvironment(UserDevRunType runConfig) throws IOException {
+        var environment = new LinkedHashMap<String, String>();
+        for (var entry : runConfig.env().entrySet()) {
+            environment.put(entry.getKey(), interpolateRunTemplateValue(entry.getValue()));
+        }
+        environment.putAll(getUserEnvironment().get());
+
+        var properties = new Properties();
+        properties.putAll(environment);
+        var destination = getEnvironmentFile().get().getAsFile().toPath();
+        Files.createDirectories(destination.getParent());
+        try (var out = FileUtils.newSafeFileOutputStream(destination)) {
+            properties.store(out, "Minecraft run environment");
+        }
+    }
+
+    private String interpolateRunTemplateValue(String value) {
+        var assetProperties = DownloadedAssetsReference.loadProperties(getAssetProperties().get().getAsFile());
+        var replacements = new LinkedHashMap<>(getRunTemplateReplacements().get());
+        replacements.put("assets_root", Objects.requireNonNull(assetProperties.assetsRoot(), "assets_root"));
+        replacements.put("asset_index", Objects.requireNonNull(assetProperties.assetIndex(), "asset_index"));
+        replacements.put("natives", getGameDirectory().get().dir("natives").getAsFile().getAbsolutePath());
+        replacements.put("MC_VERSION", getVersionCapabilities().get().minecraftVersion());
+
+        for (var entry : replacements.entrySet()) {
+            value = value.replace("${" + entry.getKey() + "}", entry.getValue());
+            value = value.replace("{" + entry.getKey() + "}", entry.getValue());
+        }
+        return value;
     }
 
     private static void addSystemProp(String name, String value, List<String> lines) {

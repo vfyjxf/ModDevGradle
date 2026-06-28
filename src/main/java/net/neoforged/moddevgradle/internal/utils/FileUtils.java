@@ -14,10 +14,12 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import org.gradle.api.GradleException;
 import org.jetbrains.annotations.ApiStatus;
@@ -28,6 +30,8 @@ public final class FileUtils {
      * The maximum number of tries that the system will try to atomically move a file.
      */
     private static final int MAX_TRIES = 2;
+    /** Package prefix for SpongePowered Mixin/ASM classes that bundler jars (e.g. VoxelMap) ship but shouldn't expose. */
+    private static final String SPONGE_PREFIX = "org/spongepowered/asm/";
 
     private FileUtils() {}
 
@@ -69,6 +73,71 @@ public final class FileUtils {
         } catch (Exception e) {
             throw new GradleException("Failed to hash file " + file, e);
         }
+    }
+
+    public static void stripJarSignatures(Path jar) throws IOException {
+        rewriteJar(jar, entry -> !entry.getName().equalsIgnoreCase(JarFile.MANIFEST_NAME) && !isJarSignatureFile(entry.getName()), unsignedManifest(readManifest(jar)));
+    }
+
+    public static void removeJarEntries(Path jar, Set<String> entryNames) throws IOException {
+        rewriteJar(jar, entry -> !entryNames.contains(entry.getName()), readManifest(jar));
+    }
+
+    private static Manifest readManifest(Path jar) throws IOException {
+        try (var input = new JarFile(jar.toFile(), false)) {
+            return input.getManifest();
+        }
+    }
+
+    private static void rewriteJar(Path jar, java.util.function.Predicate<JarEntry> keepEntry, Manifest manifest) throws IOException {
+        var tempFile = jar.resolveSibling(jar.getFileName().toString() + ".unsigned.tmp");
+        try {
+            try (var input = new JarFile(jar.toFile(), false);
+                    var output = manifest == null
+                            ? new JarOutputStream(Files.newOutputStream(tempFile))
+                            : new JarOutputStream(Files.newOutputStream(tempFile), manifest)) {
+                var entries = input.entries();
+                while (entries.hasMoreElements()) {
+                    var entry = entries.nextElement();
+                    if (entry.getName().equalsIgnoreCase(JarFile.MANIFEST_NAME) || !keepEntry.test(entry)) {
+                        continue;
+                    }
+
+                    var newEntry = new JarEntry(entry.getName());
+                    newEntry.setTime(entry.getTime());
+                    output.putNextEntry(newEntry);
+                    if (!entry.isDirectory()) {
+                        try (var entryInput = input.getInputStream(entry)) {
+                            entryInput.transferTo(output);
+                        }
+                    }
+                    output.closeEntry();
+                }
+            }
+            atomicMove(tempFile, jar);
+        } finally {
+            Files.deleteIfExists(tempFile);
+        }
+    }
+
+    private static Manifest unsignedManifest(Manifest manifest) {
+        if (manifest == null) {
+            manifest = new Manifest();
+            manifest.getMainAttributes().putValue("Manifest-Version", "1.0");
+            return manifest;
+        }
+
+        var result = new Manifest();
+        result.getMainAttributes().putAll(manifest.getMainAttributes());
+        return result;
+    }
+
+    private static boolean isJarSignatureFile(String name) {
+        var upperName = name.toUpperCase(java.util.Locale.ROOT);
+        if (!upperName.startsWith("META-INF/") || upperName.indexOf('/', "META-INF/".length()) != -1) {
+            return false;
+        }
+        return upperName.endsWith(".SF") || upperName.endsWith(".DSA") || upperName.endsWith(".RSA") || upperName.endsWith(".EC");
     }
 
     public static void writeStringSafe(Path destination, String content, Charset charset) throws IOException {
@@ -160,6 +229,35 @@ public final class FileUtils {
             Files.move(source, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException ex) {
             Files.move(source, destination, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /** Rewrites the jar in place, removing every entry under org/spongepowered/asm/. */
+    public static void stripSpongePowered(File jar) throws IOException {
+        var tmp = Path.of(jar.getAbsolutePath() + ".stripped.tmp");
+        try (var input = new JarFile(jar); var output = new JarOutputStream(Files.newOutputStream(tmp))) {
+            Enumeration<JarEntry> entries = input.entries();
+            while (entries.hasMoreElements()) {
+                var entry = entries.nextElement();
+                if (entry.getName().startsWith(RemappingTransform.SPONGE_PREFIX)) continue;
+                var copy = new JarEntry(entry.getName());
+                copy.setTime(entry.getTime());
+                output.putNextEntry(copy);
+                if (!entry.isDirectory()) {
+                    try (var in = input.getInputStream(entry)) {
+                        in.transferTo(output);
+                    }
+                }
+                output.closeEntry();
+            }
+        }
+        Files.move(tmp, jar.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    /** True if the jar contains any org/spongepowered/asm/ entry. */
+    public static boolean containsSpongePowered(File jar) throws IOException {
+        try (var jf = new JarFile(jar)) {
+            return jf.stream().map(ZipEntry::getName).anyMatch(n -> n.startsWith(SPONGE_PREFIX));
         }
     }
 }

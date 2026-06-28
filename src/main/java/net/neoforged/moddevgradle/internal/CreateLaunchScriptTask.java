@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
 import net.neoforged.moddevgradle.dsl.RunModel;
@@ -49,6 +50,9 @@ abstract class CreateLaunchScriptTask extends DefaultTask {
      */
     @InputFile
     abstract Property<String> getProgramArgsFile();
+
+    @InputFile
+    abstract Property<String> getEnvironmentFile();
 
     /**
      * This argument file is only used by the launch shell-scripts.
@@ -103,20 +107,42 @@ abstract class CreateLaunchScriptTask extends DefaultTask {
             return;
         }
 
-        var javaCommand = new ArrayList<String>();
-        javaCommand.add(getJavaExecutable().get());
-        javaCommand.add("@" + getClasspathArgsFile().get().getAsFile().getAbsolutePath());
-        javaCommand.add("@" + getVmArgsFile().get());
-        javaCommand.add(getModFolders().get().getArgument());
-        javaCommand.add(RunUtils.DEV_LAUNCH_MAIN_CLASS);
-        javaCommand.add("@" + getProgramArgsFile().get());
+        var javaCommand = createJavaCommand(
+                getJavaExecutable().get(),
+                getClasspathArgsFile().get().getAsFile(),
+                new File(getVmArgsFile().get()),
+                getModFolders().get().getArgument(),
+                new File(getProgramArgsFile().get()));
 
         var os = OperatingSystem.current();
+        var environment = getMergedEnvironment();
         if (os == OperatingSystem.WINDOWS) {
-            writeLaunchScriptForWindows(javaCommand);
+            writeLaunchScriptForWindows(javaCommand, environment);
         } else {
-            writeLaunchScriptForUnix(javaCommand);
+            writeLaunchScriptForUnix(javaCommand, environment);
         }
+    }
+
+    private Map<String, String> getMergedEnvironment() throws IOException {
+        var environment = new java.util.LinkedHashMap<>(RunUtils.loadEnvironmentFile(new File(getEnvironmentFile().get())));
+        environment.putAll(getEnvironment().get());
+        return environment;
+    }
+
+    private static List<String> createJavaCommand(
+            String javaExecutable,
+            File classpathArgsFile,
+            File vmArgsFile,
+            String modFoldersArgument,
+            File programArgsFile) throws IOException {
+        var javaCommand = new ArrayList<String>();
+        javaCommand.add(javaExecutable);
+        javaCommand.addAll(RunUtils.readArgFile(classpathArgsFile));
+        javaCommand.addAll(RunUtils.readArgFile(vmArgsFile));
+        javaCommand.add(modFoldersArgument);
+        javaCommand.add(RunUtils.DEV_LAUNCH_MAIN_CLASS);
+        javaCommand.addAll(RunUtils.readArgFile(programArgsFile));
+        return javaCommand;
     }
 
     /**
@@ -143,7 +169,7 @@ abstract class CreateLaunchScriptTask extends DefaultTask {
                 StringUtils.getNativeCharset());
     }
 
-    private void writeLaunchScriptForWindows(List<String> javaCommand) throws IOException {
+    private void writeLaunchScriptForWindows(List<String> javaCommand, Map<String, String> environment) throws IOException {
         var lines = new ArrayList<String>();
         Collections.addAll(lines,
                 "@echo off",
@@ -154,8 +180,8 @@ abstract class CreateLaunchScriptTask extends DefaultTask {
                 // Switch encoding to Unicode, otherwise the next "cd" might not work with special chars
                 "chcp 65001>nul");
 
-        for (var entry : getEnvironment().get().entrySet()) {
-            lines.add("set " + escapeBatchScriptArg(entry.getKey()) + "=" + escapeBatchScriptArg(entry.getValue()));
+        for (var entry : environment.entrySet()) {
+            lines.add(writeWindowsEnvironmentVariable(entry));
         }
 
         Collections.addAll(lines,
@@ -184,10 +210,25 @@ abstract class CreateLaunchScriptTask extends DefaultTask {
         return text;
     }
 
-    private void writeLaunchScriptForUnix(List<String> javaCommand) throws IOException {
+    private static String writeWindowsEnvironmentVariable(Map.Entry<String, String> entry) {
+        return "set \"" + escapeBatchEnvironmentValue(entry.getKey()) + "=" + escapeBatchEnvironmentValue(entry.getValue()) + "\"";
+    }
+
+    private static String escapeBatchEnvironmentValue(String text) {
+        return text
+                .replace("^", "^^")
+                .replace("&", "^&")
+                .replace("|", "^|")
+                .replace("<", "^<")
+                .replace(">", "^>")
+                .replace("%", "%%")
+                .replace("\"", "^\"");
+    }
+
+    private void writeLaunchScriptForUnix(List<String> javaCommand, Map<String, String> environment) throws IOException {
         var lines = new ArrayList<String>();
 
-        for (var entry : getEnvironment().get().entrySet()) {
+        for (var entry : environment.entrySet()) {
             lines.add("export " + escapeShellArg(entry.getKey()) + "=" + escapeShellArg(entry.getValue()));
         }
 

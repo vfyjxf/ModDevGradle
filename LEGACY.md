@@ -1,6 +1,6 @@
 # ModDevGradle Legacy Forge Plugin
 ModDevGradle has a secondary plugin (ID: `net.neoforged.moddev.legacyforge`, released alongside the normal plugin with the same version)
-that adds support for developing mods against MinecraftForge and Vanilla Minecraft versions 1.17 up to 1.20.1.  
+that adds support for developing mods against MinecraftForge and Vanilla Minecraft versions 1.12.2 up to 1.20.1.
 
 The legacy plugin is an "addon" plugin, meaning it operates on top of the normal plugin. This means that the APIs normally used
 are also available when using the legacy plugin.
@@ -37,6 +37,30 @@ legacyForge {
         testproject {
             sourceSet sourceSets.main
         }
+    }
+}
+```
+
+For Minecraft 1.12.2, use a Forge version such as:
+
+```groovy
+legacyForge {
+    version = "1.12.2-14.23.5.2860"
+}
+```
+
+MDG will use Forge's `userdev3` artifact for 1.12.2. This requires an NFRT build with legacy MCP support
+(`--mcp-mappings` and the legacy MCP mapping result IDs). Until that NFRT release is the MDG default, set
+`neoForge.neoFormRuntime.version` to a compatible published version or substitute a local NFRT legacy build.
+
+NFRT's 1.12.2 legacy MCP pipeline uses `de.oceanlabs.mcp:mcp_stable:39-1.12@zip` by default; if you need a
+different MCP CSV mapping zip, configure it explicitly:
+
+```groovy
+legacyForge {
+    enable {
+        forgeVersion = "1.12.2-14.23.5.2860"
+        mcpMappings = "de.oceanlabs.mcp:mcp_stable:39-1.12@zip"
     }
 }
 ```

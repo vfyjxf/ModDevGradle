@@ -6,9 +6,11 @@ import java.nio.file.Files;
 import javax.inject.Inject;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.JavaExec;
@@ -28,6 +30,15 @@ public abstract class RunGameTask extends JavaExec {
     @Input
     public abstract MapProperty<String, String> getEnvironmentProperty();
 
+    @InputFile
+    public abstract RegularFileProperty getEnvironmentFile();
+
+    @InputFile
+    public abstract RegularFileProperty getVmArgsFile();
+
+    @InputFile
+    public abstract RegularFileProperty getProgramArgsFile();
+
     @Internal
     public abstract DirectoryProperty getGameDirectory();
 
@@ -44,10 +55,21 @@ public abstract class RunGameTask extends JavaExec {
             throw new UncheckedIOException("Failed to create run directory", e);
         }
 
+        try {
+            getEnvironment().putAll(RunUtils.loadEnvironmentFile(getEnvironmentFile().get().getAsFile()));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read prepared run environment", e);
+        }
         getEnvironment().putAll(getEnvironmentProperty().get());
 
         classpath(getClasspathProvider());
         setWorkingDir(runDir);
+        try {
+            setJvmArgs(RunUtils.readArgFile(getVmArgsFile().get().getAsFile()));
+            setArgs(RunUtils.readArgFile(getProgramArgsFile().get().getAsFile()));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read prepared run argument files", e);
+        }
         super.exec();
     }
 }

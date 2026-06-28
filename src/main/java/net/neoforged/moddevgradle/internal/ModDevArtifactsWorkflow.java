@@ -69,6 +69,31 @@ public record ModDevArtifactsWorkflow(
             Configuration interfaceInjectionData,
             VersionCapabilitiesInternal versionCapabilities,
             boolean disableRecompilation) {
+        return create(
+                project,
+                enabledSourceSets,
+                branding,
+                extension,
+                moddingDependencies,
+                artifactNamingStrategy,
+                accessTransformers,
+                interfaceInjectionData,
+                versionCapabilities,
+                disableRecompilation,
+                null);
+    }
+
+    public static ModDevArtifactsWorkflow create(Project project,
+            Collection<SourceSet> enabledSourceSets,
+            Branding branding,
+            ModDevExtension extension,
+            ModdingDependencies moddingDependencies,
+            ArtifactNamingStrategy artifactNamingStrategy,
+            Configuration accessTransformers,
+            Configuration interfaceInjectionData,
+            VersionCapabilitiesInternal versionCapabilities,
+            boolean disableRecompilation,
+            @Nullable String legacyMcpMappings) {
         if (project.getExtensions().findByName(EXTENSION_NAME) != null) {
             throw new InvalidUserCodeException("You cannot enable modding in the same project twice.");
         }
@@ -150,6 +175,18 @@ public record ModDevArtifactsWorkflow(
             task.getParchmentData().from(parchmentData);
             task.getParchmentEnabled().set(parchment.getEnabled());
             task.getParchmentConflictResolutionPrefix().set(parchment.getConflictResolutionPrefix());
+            if (legacyMcpMappings != null) {
+                task.getLegacyMcpMappings().set(legacyMcpMappings);
+                // Legacy MCP versions (e.g. 1.12.2) depend on libraries that are not available on the NeoForged Maven
+                // NFRT consults by default: lzma:lzma only lives on Mojang's library repository, vecmath/trove4j on
+                // Maven Central, and the Scala/JLine/etc. deps on the Forge Maven. Point NFRT at all of them so the
+                // recompile compile-classpath can be resolved.
+                task.getAdditionalRepositories().addAll(java.util.List.of(
+                        "https://repo1.maven.org/maven2/",
+                        "https://libraries.minecraft.net/",
+                        "https://maven.minecraftforge.net/"
+                ));
+            }
 
             Function<WorkflowArtifact, Provider<RegularFile>> artifactPathStrategy = artifact -> artifactsBuildDir.map(dir -> dir.file(artifactNamingStrategy.getFilename(artifact)));
 
@@ -210,6 +247,7 @@ public record ModDevArtifactsWorkflow(
             // Technically, the Minecraft dependencies do not strictly need to be on the classpath because they are pulled from the legacy class path.
             // However, we do it anyway because this matches production environments, and allows launch proxies such as DevLogin to use Minecraft's libraries.
             config.getDependencies().add(moddingDependencies.gameLibrariesDependency());
+            McpToolchainHooks.get(project).configureRuntimeNatives(config, dependencyFactory, versionCapabilities.minecraftVersion());
         });
 
         // Configuration in which we place the required dependencies to develop mods for use in the compile-classpath.
@@ -220,6 +258,7 @@ public record ModDevArtifactsWorkflow(
             config.setCanBeConsumed(false);
             config.getDependencies().addLater(minecraftClassesDependency);
             config.getDependencies().add(moddingDependencies.gameLibrariesDependency());
+            McpToolchainHooks.get(project).configureRuntimeNatives(config, dependencyFactory, versionCapabilities.minecraftVersion());
             if (!versionCapabilities.needsNeoForgeInMinecraftJar() && moddingDependencies.neoForgeDependency() != null) {
                 config.getDependencies().add(moddingDependencies.neoForgeDependency());
             }

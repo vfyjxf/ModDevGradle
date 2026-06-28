@@ -58,6 +58,7 @@ public class MojangRepositoryFilter {
         filter.includeModule("io.netty", "netty-transport-native-unix-common");
         filter.includeModule("it.unimi.dsi", "fastutil");
         filter.includeModule("java3d", "vecmath");
+        filter.includeModule("lzma", "lzma");
         filter.includeModule("net.java.dev.jna", "jna");
         filter.includeModule("net.java.dev.jna", "jna-platform");
         filter.includeModule("net.java.dev.jna", "platform");
@@ -92,6 +93,7 @@ public class MojangRepositoryFilter {
         filter.includeModule("org.lwjgl.lwjgl", "lwjgl");
         filter.includeModule("org.lwjgl.lwjgl", "lwjgl-platform");
         filter.includeModule("org.lwjgl.lwjgl", "lwjgl_util");
+        filter.includeModule("org.lwjgl.lwjgl", "parent");
         filter.includeModule("org.lz4", "lz4-java");
         filter.includeModule("org.ow2.asm", "asm");
         filter.includeModule("org.ow2.asm", "asm-all");

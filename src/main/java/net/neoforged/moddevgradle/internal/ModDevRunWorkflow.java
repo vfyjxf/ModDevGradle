@@ -1,12 +1,15 @@
 package net.neoforged.moddevgradle.internal;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import javax.inject.Inject;
 import net.neoforged.minecraftdependencies.MinecraftDistribution;
 import net.neoforged.moddevgradle.dsl.InternalModelHelper;
 import net.neoforged.moddevgradle.dsl.ModModel;
@@ -20,6 +23,7 @@ import org.gradle.api.InvalidUserCodeException;
 import org.gradle.api.Named;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
+import org.gradle.api.Action;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.attributes.Attribute;
@@ -28,6 +32,7 @@ import org.gradle.api.attributes.Usage;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.Directory;
 import org.gradle.api.file.RegularFile;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.plugins.jvm.JvmTestSuite;
@@ -60,6 +65,7 @@ public class ModDevRunWorkflow {
     private final ModuleDependency testFixturesDependency;
     private final ModuleDependency gameLibrariesDependency;
     private final Configuration userDevConfigOnly;
+    private final Map<String, Provider<String>> runTemplateReplacements;
 
     /**
      * @param gameLibrariesDependency A module dependency that represents the library dependencies of the game.
@@ -75,12 +81,14 @@ public class ModDevRunWorkflow {
             @Nullable ModuleDependency testFixturesDependency,
             ModuleDependency gameLibrariesDependency,
             DomainObjectCollection<RunModel> runs,
-            VersionCapabilitiesInternal versionCapabilities) {
+            VersionCapabilitiesInternal versionCapabilities,
+            Map<String, Provider<String>> runTemplateReplacements) {
         this.project = project;
         this.branding = branding;
         this.modulePathDependency = modulePathDependency;
         this.testFixturesDependency = testFixturesDependency;
         this.gameLibrariesDependency = gameLibrariesDependency;
+        this.runTemplateReplacements = runTemplateReplacements;
 
         var configurations = project.getConfigurations();
 
@@ -138,7 +146,8 @@ public class ModDevRunWorkflow {
                 },
                 configureLegacyClasspath,
                 artifactsWorkflow.downloadAssets().flatMap(DownloadAssets::getAssetPropertiesFile),
-                versionCapabilities);
+                versionCapabilities,
+                runTemplateReplacements);
     }
 
     private static void forbidAdditionalRuntimeDependencies(Configuration configuration, VersionCapabilitiesInternal versionCapabilities) {
@@ -154,6 +163,10 @@ public class ModDevRunWorkflow {
         });
     }
 
+    private static boolean isClientRunType(String runType) {
+        return runType.equals("client") || runType.equals("data") || runType.equals("clientData");
+    }
+
     public static ModDevRunWorkflow get(Project project) {
         var workflow = ExtensionUtils.findExtension(project, EXTENSION_NAME, ModDevRunWorkflow.class);
         if (workflow == null) {
@@ -166,6 +179,14 @@ public class ModDevRunWorkflow {
             Branding branding,
             ModDevArtifactsWorkflow artifactsWorkflow,
             DomainObjectCollection<RunModel> runs) {
+        return create(project, branding, artifactsWorkflow, runs, Map.of());
+    }
+
+    public static ModDevRunWorkflow create(Project project,
+            Branding branding,
+            ModDevArtifactsWorkflow artifactsWorkflow,
+            DomainObjectCollection<RunModel> runs,
+            Map<String, Provider<String>> runTemplateReplacements) {
         var dependencies = artifactsWorkflow.dependencies();
         var versionCapabilites = artifactsWorkflow.versionCapabilities();
 
@@ -178,7 +199,8 @@ public class ModDevRunWorkflow {
                 dependencies.testFixturesDependency(),
                 dependencies.gameLibrariesDependency(),
                 runs,
-                versionCapabilites);
+                versionCapabilites,
+                runTemplateReplacements);
 
         project.getExtensions().add(EXTENSION_NAME, workflow);
 
@@ -228,7 +250,8 @@ public class ModDevRunWorkflow {
                         }
                     },
                     artifactsWorkflow.downloadAssets().flatMap(DownloadAssets::getAssetPropertiesFile),
-                    artifactsWorkflow.versionCapabilities());
+                    artifactsWorkflow.versionCapabilities(),
+                    runTemplateReplacements);
         }
     }
 
@@ -248,7 +271,8 @@ public class ModDevRunWorkflow {
             Consumer<Configuration> configureModulePath,
             Consumer<Configuration> configureLegacyClasspath,
             Provider<RegularFile> assetPropertiesFile,
-            VersionCapabilitiesInternal versionCapabilities) {
+            VersionCapabilitiesInternal versionCapabilities,
+            Map<String, Provider<String>> runTemplateReplacements) {
         var dependencyFactory = project.getDependencyFactory();
         var ideIntegration = IdeIntegration.of(project, branding);
 
@@ -285,6 +309,7 @@ public class ModDevRunWorkflow {
                     assetPropertiesFile,
                     devLaunchConfig,
                     versionCapabilities,
+                    runTemplateReplacements,
                     createLaunchScriptsTask);
             prepareRunTasks.put(run, prepareRunTask);
         });
@@ -308,6 +333,7 @@ public class ModDevRunWorkflow {
             Provider<RegularFile> assetPropertiesFile,
             Configuration devLaunchConfig,
             VersionCapabilitiesInternal versionCapabilities,
+            Map<String, Provider<String>> runTemplateReplacements,
             TaskProvider<Task> createLaunchScriptsTask) {
         var ideIntegration = IdeIntegration.of(project, branding);
         var configurations = project.getConfigurations();
@@ -341,13 +367,14 @@ public class ModDevRunWorkflow {
                 spec.shouldResolveConsistentlyWith(runtimeClasspathConfig.get());
                 spec.attributes(attributes -> {
                     attributes.attributeProvider(MinecraftDistribution.ATTRIBUTE, type.map(t -> {
-                        var name = t.equals("client") || t.equals("data") || t.equals("clientData") ? MinecraftDistribution.CLIENT : MinecraftDistribution.SERVER;
+                        var name = isClientRunType(t) ? MinecraftDistribution.CLIENT : MinecraftDistribution.SERVER;
                         return project.getObjects().named(MinecraftDistribution.class, name);
                     }));
                     setNamedAttribute(project, attributes, Usage.USAGE_ATTRIBUTE, Usage.JAVA_RUNTIME);
                 });
                 configureLegacyClasspath.accept(spec);
                 spec.extendsFrom(run.getAdditionalRuntimeClasspathConfiguration());
+                McpToolchainHooks.get(project).configureRuntimeNatives(spec, project.getDependencyFactory(), versionCapabilities.minecraftVersion());
             });
 
             var writeLcpTask = tasks.register(InternalModelHelper.nameOfRun(run, "write", "legacyClasspath"), WriteLegacyClasspath.class, writeLcp -> {
@@ -363,6 +390,32 @@ public class ModDevRunWorkflow {
             legacyClasspathFile = null;
         }
 
+        var nativeLibraries = configurations.create(InternalModelHelper.nameOfRun(run, "", "nativeLibraries"), spec -> {
+            spec.setDescription("Contains native libraries that should be extracted for run " + run.getName() + ".");
+            spec.setCanBeResolved(true);
+            spec.setCanBeConsumed(false);
+            spec.shouldResolveConsistentlyWith(runtimeClasspathConfig.get());
+            spec.attributes(attributes -> {
+                setNamedAttribute(project, attributes, MinecraftDistribution.ATTRIBUTE, MinecraftDistribution.CLIENT);
+                setNamedAttribute(project, attributes, Usage.USAGE_ATTRIBUTE, Usage.JAVA_RUNTIME);
+            });
+            if (versionCapabilities.legacyClasspath()) {
+                spec.getDependencies().add(project.getDependencyFactory()
+                        .create("net.neoforged:minecraft-dependencies:" + versionCapabilities.minecraftVersion())
+                        .capabilities(caps -> caps.requireCapability("net.neoforged:minecraft-dependencies-natives")));
+                McpToolchainHooks.get(project).configureNativeLibraries(spec, project.getDependencyFactory(), versionCapabilities.minecraftVersion());
+            }
+        });
+        var nativesDirectory = run.getGameDirectory().map(dir -> dir.dir("natives"));
+        var extractNativesTask = tasks.register(InternalModelHelper.nameOfRun(run, "extract", "natives"), ExtractNatives.class, task -> {
+            task.setGroup(branding.internalTaskGroup());
+            task.setDescription("Extracts native libraries for the " + run.getName() + " Minecraft run.");
+            task.getEnabledForRun().set(type.map(ModDevRunWorkflow::isClientRunType));
+            task.onlyIf(ignored -> task.getEnabledForRun().get());
+            task.getNativeLibraries().from(nativeLibraries);
+            task.getOutputDirectory().set(nativesDirectory);
+        });
+
         var prepareRunTask = tasks.register(InternalModelHelper.nameOfRun(run, "prepare", "run"), PrepareRun.class, task -> {
             task.setGroup(branding.internalTaskGroup());
             task.setDescription("Prepares all files needed to launch the " + run.getName() + " Minecraft run.");
@@ -370,6 +423,7 @@ public class ModDevRunWorkflow {
             task.getGameDirectory().set(run.getGameDirectory());
             task.getVmArgsFile().set(RunUtils.getArgFile(argFileDir, run, RunUtils.RunArgFile.VMARGS));
             task.getProgramArgsFile().set(RunUtils.getArgFile(argFileDir, run, RunUtils.RunArgFile.PROGRAMARGS));
+            task.getEnvironmentFile().set(RunUtils.getArgFile(argFileDir, run, RunUtils.RunArgFile.ENVIRONMENT));
             task.getLog4jConfigFileOverride().set(run.getLoggingConfigFile());
             task.getLog4jConfigFile().set(RunUtils.getArgFile(argFileDir, run, RunUtils.RunArgFile.LOG4J_CONFIG));
             task.getRunType().set(run.getType());
@@ -383,12 +437,16 @@ public class ModDevRunWorkflow {
                 props = new HashMap<>(props);
                 return props;
             }));
+            task.getUserEnvironment().set(run.getEnvironment());
+            task.getRunTemplateReplacements().set(project.provider(() -> runTemplateReplacements.entrySet().stream()
+                    .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().get()))));
             task.getMainClass().set(run.getMainClass());
             task.getProgramArguments().set(run.getProgramArguments());
             task.getJvmArguments().set(run.getJvmArguments());
             task.getGameLogLevel().set(run.getLogLevel());
             task.getDevLogin().set(run.getDevLogin());
             task.getVersionCapabilities().set(versionCapabilities);
+            task.dependsOn(extractNativesTask);
         });
         ideIntegration.runTaskOnProjectSync(prepareRunTask);
 
@@ -404,6 +462,7 @@ public class ModDevRunWorkflow {
             task.getClasspathArgsFile().set(RunUtils.getArgFile(argFileDir, run, RunUtils.RunArgFile.CLASSPATH));
             task.getVmArgsFile().set(prepareRunTask.get().getVmArgsFile().map(d -> d.getAsFile().getAbsolutePath()));
             task.getProgramArgsFile().set(prepareRunTask.get().getProgramArgsFile().map(d -> d.getAsFile().getAbsolutePath()));
+            task.getEnvironmentFile().set(prepareRunTask.get().getEnvironmentFile().map(d -> d.getAsFile().getAbsolutePath()));
             task.getEnvironment().set(run.getEnvironment());
             task.getModFolders().set(RunUtils.getGradleModFoldersProvider(project, run.getLoadedMods(), null));
         });
@@ -413,18 +472,20 @@ public class ModDevRunWorkflow {
             task.setGroup(branding.publicTaskGroup());
             task.setDescription("Runs the " + run.getName() + " Minecraft run configuration.");
 
-            // Launch with the Java version used in the project
+            // Launch with the Java version used in the project (as a convention, so plugins like the 1.12.2
+            // mcpforge toolchain — which must run launchwrapper on Java 8 — can override it via set()).
             var toolchainService = ExtensionUtils.findExtension(project, "javaToolchains", JavaToolchainService.class);
-            task.getJavaLauncher().set(toolchainService.launcherFor(spec -> spec.getLanguageVersion().set(javaExtension.getToolchain().getLanguageVersion())));
+            task.getJavaLauncher().convention(toolchainService.launcherFor(spec -> spec.getLanguageVersion().set(javaExtension.getToolchain().getLanguageVersion())));
             // Note: this contains both the runtimeClasspath configuration and the sourceset's outputs.
             // This records a dependency on compiling and processing the resources of the source set.
             task.getClasspathProvider().from(run.getSourceSet().map(SourceSet::getRuntimeClasspath));
             task.getGameDirectory().set(run.getGameDirectory());
 
             task.getEnvironmentProperty().set(run.getEnvironment());
-            task.jvmArgs(RunUtils.getArgFileParameter(prepareRunTask.get().getVmArgsFile().get()).replace("\\", "\\\\"));
+            task.getEnvironmentFile().set(prepareRunTask.get().getEnvironmentFile());
+            task.getVmArgsFile().set(prepareRunTask.get().getVmArgsFile());
+            task.getProgramArgsFile().set(prepareRunTask.get().getProgramArgsFile());
             task.getMainClass().set(RunUtils.DEV_LAUNCH_MAIN_CLASS);
-            task.args(RunUtils.getArgFileParameter(prepareRunTask.get().getProgramArgsFile().get()).replace("\\", "\\\\"));
             // Of course we need the arg files to be up-to-date ;)
             task.dependsOn(prepareRunTask);
             task.dependsOn(run.getTasksBefore());
@@ -448,7 +509,8 @@ public class ModDevRunWorkflow {
             Consumer<Configuration> configureModulePath,
             Consumer<Configuration> configureLegacyClasspath,
             Provider<RegularFile> assetPropertiesFile,
-            VersionCapabilitiesInternal versionCapabilities) {
+            VersionCapabilitiesInternal versionCapabilities,
+            Map<String, Provider<String>> runTemplateReplacements) {
         var gameDirectory = new File(project.getProjectDir(), JUNIT_GAME_DIR);
 
         var ideIntegration = IdeIntegration.of(project, branding);
@@ -496,6 +558,7 @@ public class ModDevRunWorkflow {
 
         var vmArgsFile = runArgsDir.map(dir -> dir.file("vmArgs.txt"));
         var programArgsFile = runArgsDir.map(dir -> dir.file("programArgs.txt"));
+        var environmentFile = runArgsDir.map(dir -> dir.file("environment.properties"));
         var log4j2ConfigFile = runArgsDir.map(dir -> dir.file("log4j2.xml"));
         var prepareTask = tasks.register("prepareNeoForgeTestFiles", PrepareTest.class, task -> {
             task.setGroup(branding.internalTaskGroup());
@@ -503,6 +566,7 @@ public class ModDevRunWorkflow {
             task.getGameDirectory().set(gameDirectory);
             task.getVmArgsFile().set(vmArgsFile);
             task.getProgramArgsFile().set(programArgsFile);
+            task.getEnvironmentFile().set(environmentFile);
             task.getLog4jConfigFile().set(log4j2ConfigFile);
             task.getRunTypeTemplatesSource().from(runTemplatesSourceFile);
             task.getModules().from(neoForgeModDevModules);
@@ -510,6 +574,8 @@ public class ModDevRunWorkflow {
                 task.getLegacyClasspathFile().set(legacyClasspathFile);
             }
             task.getAssetProperties().set(assetPropertiesFile);
+            task.getRunTemplateReplacements().set(project.provider(() -> runTemplateReplacements.entrySet().stream()
+                    .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().get()))));
             task.getGameLogLevel().set(Level.INFO);
         });
 
@@ -523,6 +589,9 @@ public class ModDevRunWorkflow {
             // file containing the program arguments needed to launch
             task.systemProperty("fml.junit.argsfile", programArgsFile.get().getAsFile().getAbsolutePath());
             task.jvmArgs(RunUtils.getArgFileParameter(vmArgsFile.get()));
+            var loadEnvironment = project.getObjects().newInstance(LoadPreparedTestEnvironment.class);
+            loadEnvironment.getEnvironmentFile().set(environmentFile);
+            task.doFirst("load prepared Minecraft test environment", loadEnvironment);
 
             var modFoldersProvider = RunUtils.getGradleModFoldersProvider(project, loadedMods, testedMod);
             task.getJvmArgumentProviders().add(modFoldersProvider);
@@ -538,5 +607,21 @@ public class ModDevRunWorkflow {
 
     private static <T extends Named> void setNamedAttribute(Project project, AttributeContainer attributes, Attribute<T> attribute, String value) {
         attributes.attribute(attribute, project.getObjects().named(attribute.getType(), value));
+    }
+
+    public static abstract class LoadPreparedTestEnvironment implements Action<Task> {
+        @Inject
+        public LoadPreparedTestEnvironment() {}
+
+        public abstract RegularFileProperty getEnvironmentFile();
+
+        @Override
+        public void execute(Task task) {
+            try {
+                ((Test) task).environment(RunUtils.loadEnvironmentFile(getEnvironmentFile().get().getAsFile()));
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to read prepared test environment", e);
+            }
+        }
     }
 }

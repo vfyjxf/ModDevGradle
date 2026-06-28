@@ -1,0 +1,16 @@
+[
+  {
+    "modid": "mymod1122",
+    "name": "Legacy 1.12.2 Smoke Test",
+    "description": "Minimal Forge 1.12.2 fixture for ModDevGradle.",
+    "version": "1.0.0",
+    "mcversion": "1.12.2",
+    "url": "",
+    "updateUrl": "",
+    "authorList": [],
+    "credits": "",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+  }
+]

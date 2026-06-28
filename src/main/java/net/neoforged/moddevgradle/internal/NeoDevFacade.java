@@ -1,5 +1,6 @@
 package net.neoforged.moddevgradle.internal;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import net.neoforged.moddevgradle.dsl.ModModel;
@@ -41,7 +42,8 @@ public final class NeoDevFacade {
                 configureModulePath,
                 configureAdditionalClasspath,
                 assetPropertiesFile,
-                neoFormVersion.map(VersionCapabilitiesInternal::ofNeoFormVersion).getOrElse(VersionCapabilitiesInternal.latest()));
+                neoFormVersion.map(VersionCapabilitiesInternal::ofNeoFormVersion).getOrElse(VersionCapabilitiesInternal.latest()),
+                Map.of());
     }
 
     public static void setupTestTask(Project project,
@@ -65,7 +67,8 @@ public final class NeoDevFacade {
                 configureModulePath,
                 configureAdditionalClasspath,
                 assetPropertiesFile,
-                neoFormVersion.map(VersionCapabilitiesInternal::ofNeoFormVersion).getOrElse(VersionCapabilitiesInternal.latest()));
+                neoFormVersion.map(VersionCapabilitiesInternal::ofNeoFormVersion).getOrElse(VersionCapabilitiesInternal.latest()),
+                Map.of());
     }
 
     public static void runTaskOnProjectSync(Project project, Object task) {
