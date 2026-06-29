@@ -239,7 +239,7 @@ public final class FileUtils {
             Enumeration<JarEntry> entries = input.entries();
             while (entries.hasMoreElements()) {
                 var entry = entries.nextElement();
-                if (entry.getName().startsWith(RemappingTransform.SPONGE_PREFIX)) continue;
+                if (entry.getName().startsWith(SPONGE_PREFIX)) continue;
                 var copy = new JarEntry(entry.getName());
                 copy.setTime(entry.getTime());
                 output.putNextEntry(copy);
