@@ -291,6 +291,7 @@ public class McpForgeModDevPlugin implements Plugin<Project> {
             }
             if ("1.12.2".equals(versionCapabilities.minecraftVersion())) {
                 run.getSystemProperties().put("fml.ignorePatchDiscrepancies", "true");
+                run.getSystemProperties().put("fml.ignoreInvalidMinecraftCertificates", "true");
             }
 
             if (!versionCapabilities.modLocatorRework()) {
@@ -497,15 +498,22 @@ public class McpForgeModDevPlugin implements Plugin<Project> {
             task.doFirst(t -> {
                 var cp = task.getClasspathProvider().getFiles();
 
-                PopulateForgeGradleMcpCache cacheTask =
-                        (PopulateForgeGradleMcpCache)
-                        project.getTasks().getByName("populateForgeGradleMcpCache");
-                String cacheBase = cacheTask.getCacheBaseDirectory().get();
-                String mcVersion = cacheTask.getMinecraftVersion().get();
-                Path notchSrg = Path.of(cacheBase, mcVersion, "srgs", "notch-srg.srg");
-                if (Files.exists(notchSrg)) {
-                    task.systemProperty("net.minecraftforge.gradle.GradleStart.srg.notch-srg", notchSrg.toString());
-                    task.systemProperty("net.minecraftforge.gradle.GradleStart.csvDir", cacheBase);
+                // The cache task only exists when mcpMappings is configured (legacy MCP builds).
+                var cacheTask = (PopulateForgeGradleMcpCache) project.getTasks().findByName("populateForgeGradleMcpCache");
+                if (cacheTask != null) {
+                    var cacheBase = cacheTask.getCacheBaseDirectory().get();
+                    var srgsDir = Path.of(cacheBase, cacheTask.getMinecraftVersion().get(), "srgs");
+                    if (Files.isDirectory(srgsDir)) {
+                        // Mirror FG-2's GradleStartCommon: expose every SRG map it would have generated plus the
+                        // CSV dir, so 1.12.2 mods (e.g. CodeChickenLib) that read these at runtime resolve correctly.
+                        task.systemProperty("net.minecraftforge.gradle.GradleStart.srgDir", srgsDir.toString());
+                        task.systemProperty("net.minecraftforge.gradle.GradleStart.csvDir", cacheBase);
+                        putSrgProperty(task, srgsDir, "notch-srg", "net.minecraftforge.gradle.GradleStart.srg.notch-srg");
+                        putSrgProperty(task, srgsDir, "notch-mcp", "net.minecraftforge.gradle.GradleStart.srg.notch-mcp");
+                        putSrgProperty(task, srgsDir, "srg-mcp", "net.minecraftforge.gradle.GradleStart.srg.srg-mcp");
+                        putSrgProperty(task, srgsDir, "mcp-srg", "net.minecraftforge.gradle.GradleStart.srg.mcp-srg");
+                        putSrgProperty(task, srgsDir, "mcp-notch", "net.minecraftforge.gradle.GradleStart.srg.mcp-notch");
+                    }
                 }
 
                 var coremodClasses = discoverCoremods(project, cp);
@@ -522,6 +530,13 @@ public class McpForgeModDevPlugin implements Plugin<Project> {
                 }
             });
         });
+    }
+
+    private static void putSrgProperty(RunGameTask task, Path srgsDir, String fileName, String key) {
+        var file = srgsDir.resolve(fileName + ".srg");
+        if (Files.exists(file)) {
+            task.systemProperty(key, file.toString());
+        }
     }
 
     private static Set<String> discoverCoremods(Project project, Set<File> files) {

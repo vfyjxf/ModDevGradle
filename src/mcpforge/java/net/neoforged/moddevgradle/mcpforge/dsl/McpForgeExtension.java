@@ -12,8 +12,8 @@ import org.gradle.api.Project;
 import org.gradle.api.provider.ListProperty;
 
 /**
- * The {@code legacyForge} extension for the mcpforge plugin, owning its {@link #enable(Action)} wiring.
- * {@link LegacyForgeModdingSettings} is reused as-is.
+ * The {@code mcpForge} extension for the mcpforge plugin, owning its {@link #enable(Action)} wiring.
+ * Settings are provided by {@link McpForgeModdingSettings}.
  */
 public abstract class McpForgeExtension extends ModDevExtension {
     private final Project project;
