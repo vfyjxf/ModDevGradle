@@ -621,5 +621,16 @@ public class McpForgeModDevPlugin implements Plugin<Project> {
         public void configureNativeLibraries(Configuration nativeLibraries, DependencyFactory dependencyFactory, String minecraftVersion) {
             Lwjgl2Natives.configure(nativeLibraries, dependencyFactory, minecraftVersion);
         }
+
+        @Override
+        public boolean usesLegacyAppleLwjgl2(String minecraftVersion) {
+            return Lwjgl2Natives.shouldUseAppleNativeReplacement(
+                    minecraftVersion, System.getProperty("os.name"), System.getProperty("os.arch"));
+        }
+
+        @Override
+        public boolean needsLegacyForgeSplashDisabled(String minecraftVersion) {
+            return "1.12.2".equals(minecraftVersion);
+        }
     }
 }

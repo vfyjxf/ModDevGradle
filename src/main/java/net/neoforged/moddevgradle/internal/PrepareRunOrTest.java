@@ -172,10 +172,8 @@ abstract class PrepareRunOrTest extends DefaultTask {
     }
 
     private boolean usesLegacyAppleLwjgl2() {
-        var capabilities = getVersionCapabilities().get();
-        var arch = System.getProperty("os.arch");
-        return "1.12.2".equals(capabilities.minecraftVersion())
-                && ("aarch64".equals(arch) || "arm64".equals(arch));
+        return McpToolchainHooks.get(getProject())
+                .usesLegacyAppleLwjgl2(getVersionCapabilities().get().minecraftVersion());
     }
 
     @TaskAction
@@ -214,7 +212,7 @@ abstract class PrepareRunOrTest extends DefaultTask {
     private void configureLegacyForgeSplash(File runDir) throws IOException {
         if (!isClientDistribution()
                 || OperatingSystem.current() != OperatingSystem.MACOS
-                || !"1.12.2".equals(getVersionCapabilities().get().minecraftVersion())) {
+                || !McpToolchainHooks.get(getProject()).needsLegacyForgeSplashDisabled(getVersionCapabilities().get().minecraftVersion())) {
             return;
         }
 
