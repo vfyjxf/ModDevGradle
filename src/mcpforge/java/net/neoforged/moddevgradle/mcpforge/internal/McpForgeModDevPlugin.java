@@ -216,13 +216,6 @@ public class McpForgeModDevPlugin implements Plugin<Project> {
 
         var configurations = project.getConfigurations();
 
-        // The no-recompile (binary-patch) path is not supported for 1.12.2/MCP: the binary remap it relies on leaks
-        // obfuscated type references and mangles generic signatures, so mods cannot compile/run against it. The
-        // decompile+recompile path is required.
-        if (settings.isDisableRecompilation()) {
-            throw new InvalidUserCodeException("disableRecompilation is not supported by the mcpforge plugin; the 1.12.2/MCP toolchain requires the decompile+recompile path.");
-        }
-
         var artifacts = ModDevArtifactsWorkflow.create(
                 project,
                 settings.getEnabledSourceSets(),
@@ -233,7 +226,7 @@ public class McpForgeModDevPlugin implements Plugin<Project> {
                 configurations.getByName(DataFileCollections.CONFIGURATION_ACCESS_TRANSFORMERS),
                 configurations.getByName(DataFileCollections.CONFIGURATION_INTERFACE_INJECTION_DATA),
                 versionCapabilities,
-                settings.isDisableRecompilation(),
+                false, // disableRecompilation is not supported by mcpforge (no-recompile/binary-patch path is not viable for 1.12.2/MCP)
                 settings.getMcpMappings());
 
         // Configure the mixin and obfuscation extensions.
