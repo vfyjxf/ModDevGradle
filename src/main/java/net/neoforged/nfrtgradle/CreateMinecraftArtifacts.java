@@ -6,9 +6,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import javax.inject.Inject;
-import net.neoforged.moddevgradle.internal.utils.FileUtils;
 import net.neoforged.moddevgradle.internal.utils.ProblemReportingUtil;
 import net.neoforged.problems.FileProblemReporter;
 import net.neoforged.problems.Problem;
@@ -430,40 +428,8 @@ public abstract class CreateMinecraftArtifacts extends NeoFormRuntimeTask {
 
         try {
             run(args);
-            stripJarSignatures(requestedResults);
-            removePreAppliedLegacyForgeRuntimePatches(requestedResults);
         } finally {
             reportProblems(problemsReport);
-        }
-    }
-
-    private static void removePreAppliedLegacyForgeRuntimePatches(List<RequestedResult> requestedResults) {
-        for (var requestedResult : requestedResults) {
-            var destination = requestedResult.destination();
-            if (!destination.isFile() || !destination.getName().endsWith(".jar")) {
-                continue;
-            }
-
-            try {
-                FileUtils.removeJarEntries(destination.toPath(), Set.of("binpatches.pack.lzma"));
-            } catch (IOException e) {
-                throw new GradleException("Failed to remove legacy Forge runtime patches from generated jar " + destination, e);
-            }
-        }
-    }
-
-    private static void stripJarSignatures(List<RequestedResult> requestedResults) {
-        for (var requestedResult : requestedResults) {
-            var destination = requestedResult.destination();
-            if (!destination.isFile() || !destination.getName().endsWith(".jar")) {
-                continue;
-            }
-
-            try {
-                FileUtils.stripJarSignatures(destination.toPath());
-            } catch (IOException e) {
-                throw new GradleException("Failed to strip signature metadata from generated jar " + destination, e);
-            }
         }
     }
 
