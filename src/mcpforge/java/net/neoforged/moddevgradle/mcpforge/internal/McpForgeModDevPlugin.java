@@ -17,7 +17,6 @@ import net.neoforged.minecraftdependencies.MinecraftDependenciesPlugin;
 import net.neoforged.moddevgradle.internal.ArtifactNamingStrategy;
 import net.neoforged.moddevgradle.internal.Branding;
 import net.neoforged.moddevgradle.internal.DataFileCollections;
-import net.neoforged.moddevgradle.internal.JarPostProcessor;
 import net.neoforged.moddevgradle.internal.McpToolchainHooks;
 import net.neoforged.moddevgradle.internal.ModDevArtifactsWorkflow;
 import net.neoforged.moddevgradle.internal.ModDevRunWorkflow;
@@ -168,13 +167,8 @@ public class McpForgeModDevPlugin implements Plugin<Project> {
                 dataFileCollections.interfaceInjectionData().extension());
 
 
-        // Register MCP hooks so the main workflow picks up LWJGL2 natives + jar post-processing.
+        // Register MCP hooks so the main workflow picks up LWJGL2 natives.
         project.getExtensions().add(McpToolchainHooks.EXTENSION_NAME, new McpHooks());
-
-        // Register the 1.12.2 jar post-processor for all CreateMinecraftArtifacts tasks.
-        project.getTasks().withType(CreateMinecraftArtifacts.class).configureEach(task -> {
-            task.getJarPostProcessors().add(new ForgeJarPostProcessor());
-        });
 
         // Collect Access Transformers declared by dependency jars via their FMLAT manifest (FG2/RFG parity).
         configureDependencyAccessTransformers(project);
@@ -626,13 +620,6 @@ public class McpForgeModDevPlugin implements Plugin<Project> {
         @Override
         public void configureNativeLibraries(Configuration nativeLibraries, DependencyFactory dependencyFactory, String minecraftVersion) {
             Lwjgl2Natives.configure(nativeLibraries, dependencyFactory, minecraftVersion);
-        }
-    }
-
-    static class ForgeJarPostProcessor implements JarPostProcessor {
-        @Override
-        public void process(Path jar, @Nullable Path srgToMcpMappings) throws IOException {
-            LegacyForgeJarProcessor.remapMinecraftReferences(jar, srgToMcpMappings);
         }
     }
 }

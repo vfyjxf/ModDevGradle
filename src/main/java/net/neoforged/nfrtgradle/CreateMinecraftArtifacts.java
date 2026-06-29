@@ -8,7 +8,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import javax.inject.Inject;
-import net.neoforged.moddevgradle.internal.JarPostProcessor;
 import net.neoforged.moddevgradle.internal.utils.FileUtils;
 import net.neoforged.moddevgradle.internal.utils.ProblemReportingUtil;
 import net.neoforged.problems.FileProblemReporter;
@@ -277,13 +276,6 @@ public abstract class CreateMinecraftArtifacts extends NeoFormRuntimeTask {
     @ApiStatus.Experimental
     public abstract Property<Boolean> getIncludeResourcesInGameJar();
 
-    /**
-     * Jar post-processors for legacy MCP versions (e.g. 1.12.2 Forge deobf data remapping).
-     * Registered by the mcpforge plugin; empty by default.
-     */
-    @Internal
-    public abstract ListProperty<JarPostProcessor> getJarPostProcessors();
-
     @Inject
     protected abstract Problems getProblems();
 
@@ -439,7 +431,6 @@ public abstract class CreateMinecraftArtifacts extends NeoFormRuntimeTask {
         try {
             run(args);
             stripJarSignatures(requestedResults);
-            remapLegacyForgeMinecraftReferences(requestedResults, getJarPostProcessors().get());
             removePreAppliedLegacyForgeRuntimePatches(requestedResults);
         } finally {
             reportProblems(problemsReport);
@@ -459,37 +450,6 @@ public abstract class CreateMinecraftArtifacts extends NeoFormRuntimeTask {
                 throw new GradleException("Failed to remove legacy Forge runtime patches from generated jar " + destination, e);
             }
         }
-    }
-
-    private static void remapLegacyForgeMinecraftReferences(List<RequestedResult> requestedResults, List<JarPostProcessor> postProcessors) {
-        if (postProcessors.isEmpty()) {
-            return;
-        }
-        for (var requestedResult : requestedResults) {
-            var destination = requestedResult.destination();
-            if (!destination.isFile() || !destination.getName().endsWith(".jar")) {
-                continue;
-            }
-
-            try {
-                for (var postProcessor : postProcessors) {
-                    postProcessor.process(
-                            destination.toPath(),
-                            findRequestedResult(requestedResults, "intermediaryToNamedMapping"));
-                }
-            } catch (IOException e) {
-                throw new GradleException("Failed to remap legacy Forge Minecraft references in generated jar " + destination, e);
-            }
-        }
-    }
-
-    private static java.nio.file.Path findRequestedResult(List<RequestedResult> requestedResults, String id) {
-        for (var requestedResult : requestedResults) {
-            if (requestedResult.id().equals(id) && requestedResult.destination().isFile()) {
-                return requestedResult.destination().toPath();
-            }
-        }
-        return null;
     }
 
     private static void stripJarSignatures(List<RequestedResult> requestedResults) {
