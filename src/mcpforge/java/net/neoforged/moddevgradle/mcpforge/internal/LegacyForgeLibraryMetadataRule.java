@@ -1,4 +1,4 @@
-package net.neoforged.moddevgradle.legacyforge.internal;
+package net.neoforged.moddevgradle.mcpforge.internal;
 
 import java.util.ArrayList;
 import org.gradle.api.artifacts.CacheableRule;
@@ -9,14 +9,14 @@ import org.gradle.api.artifacts.DirectDependencyMetadata;
 
 /**
  * Normalizes old Forge library metadata that predates today's Maven Central coordinates or only
- * exists as jar-only artifacts on Forge's Maven.
+ * exists as jar-only artifacts on Forge's Maven. Applies to all 1.12.2 Forge versions (2847+).
  */
 @CacheableRule
 public class LegacyForgeLibraryMetadataRule implements ComponentMetadataRule {
     @Override
     public void execute(ComponentMetadataContext context) {
         var id = context.getDetails().getId();
-        if (!id.getVersion().equals("1.12.2-14.23.5.2860")) {
+        if (!id.getVersion().startsWith("1.12.2-")) {
             return;
         }
 

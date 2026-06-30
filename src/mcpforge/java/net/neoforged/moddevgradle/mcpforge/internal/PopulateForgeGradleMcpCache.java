@@ -1,4 +1,4 @@
-package net.neoforged.moddevgradle.legacyforge.tasks;
+package net.neoforged.moddevgradle.mcpforge.internal;
 
 import java.io.IOException;
 import java.io.InputStream;
