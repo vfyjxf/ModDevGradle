@@ -423,7 +423,6 @@ public class ModDevRunWorkflow {
             task.getGameDirectory().set(run.getGameDirectory());
             task.getVmArgsFile().set(RunUtils.getArgFile(argFileDir, run, RunUtils.RunArgFile.VMARGS));
             task.getProgramArgsFile().set(RunUtils.getArgFile(argFileDir, run, RunUtils.RunArgFile.PROGRAMARGS));
-            task.getEnvironmentFile().set(RunUtils.getArgFile(argFileDir, run, RunUtils.RunArgFile.ENVIRONMENT));
             task.getLog4jConfigFileOverride().set(run.getLoggingConfigFile());
             task.getLog4jConfigFile().set(RunUtils.getArgFile(argFileDir, run, RunUtils.RunArgFile.LOG4J_CONFIG));
             task.getRunType().set(run.getType());
@@ -437,9 +436,6 @@ public class ModDevRunWorkflow {
                 props = new HashMap<>(props);
                 return props;
             }));
-            task.getUserEnvironment().set(run.getEnvironment());
-            task.getRunTemplateReplacements().set(project.provider(() -> runTemplateReplacements.entrySet().stream()
-                    .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().get()))));
             task.getMainClass().set(run.getMainClass());
             task.getProgramArguments().set(run.getProgramArguments());
             task.getJvmArguments().set(run.getJvmArguments());
@@ -462,7 +458,6 @@ public class ModDevRunWorkflow {
             task.getClasspathArgsFile().set(RunUtils.getArgFile(argFileDir, run, RunUtils.RunArgFile.CLASSPATH));
             task.getVmArgsFile().set(prepareRunTask.get().getVmArgsFile().map(d -> d.getAsFile().getAbsolutePath()));
             task.getProgramArgsFile().set(prepareRunTask.get().getProgramArgsFile().map(d -> d.getAsFile().getAbsolutePath()));
-            task.getEnvironmentFile().set(prepareRunTask.get().getEnvironmentFile().map(d -> d.getAsFile().getAbsolutePath()));
             task.getEnvironment().set(run.getEnvironment());
             task.getModFolders().set(RunUtils.getGradleModFoldersProvider(project, run.getLoadedMods(), null));
         });
@@ -482,7 +477,6 @@ public class ModDevRunWorkflow {
             task.getGameDirectory().set(run.getGameDirectory());
 
             task.getEnvironmentProperty().set(run.getEnvironment());
-            task.getEnvironmentFile().set(prepareRunTask.get().getEnvironmentFile());
             task.getVmArgsFile().set(prepareRunTask.get().getVmArgsFile());
             task.getProgramArgsFile().set(prepareRunTask.get().getProgramArgsFile());
             task.getMainClass().set(RunUtils.DEV_LAUNCH_MAIN_CLASS);
@@ -566,7 +560,6 @@ public class ModDevRunWorkflow {
             task.getGameDirectory().set(gameDirectory);
             task.getVmArgsFile().set(vmArgsFile);
             task.getProgramArgsFile().set(programArgsFile);
-            task.getEnvironmentFile().set(environmentFile);
             task.getLog4jConfigFile().set(log4j2ConfigFile);
             task.getRunTypeTemplatesSource().from(runTemplatesSourceFile);
             task.getModules().from(neoForgeModDevModules);
@@ -574,8 +567,6 @@ public class ModDevRunWorkflow {
                 task.getLegacyClasspathFile().set(legacyClasspathFile);
             }
             task.getAssetProperties().set(assetPropertiesFile);
-            task.getRunTemplateReplacements().set(project.provider(() -> runTemplateReplacements.entrySet().stream()
-                    .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().get()))));
             task.getGameLogLevel().set(Level.INFO);
         });
 
@@ -589,9 +580,6 @@ public class ModDevRunWorkflow {
             // file containing the program arguments needed to launch
             task.systemProperty("fml.junit.argsfile", programArgsFile.get().getAsFile().getAbsolutePath());
             task.jvmArgs(RunUtils.getArgFileParameter(vmArgsFile.get()));
-            var loadEnvironment = project.getObjects().newInstance(LoadPreparedTestEnvironment.class);
-            loadEnvironment.getEnvironmentFile().set(environmentFile);
-            task.doFirst("load prepared Minecraft test environment", loadEnvironment);
 
             var modFoldersProvider = RunUtils.getGradleModFoldersProvider(project, loadedMods, testedMod);
             task.getJvmArgumentProviders().add(modFoldersProvider);
@@ -607,21 +595,5 @@ public class ModDevRunWorkflow {
 
     private static <T extends Named> void setNamedAttribute(Project project, AttributeContainer attributes, Attribute<T> attribute, String value) {
         attributes.attribute(attribute, project.getObjects().named(attribute.getType(), value));
-    }
-
-    public static abstract class LoadPreparedTestEnvironment implements Action<Task> {
-        @Inject
-        public LoadPreparedTestEnvironment() {}
-
-        public abstract RegularFileProperty getEnvironmentFile();
-
-        @Override
-        public void execute(Task task) {
-            try {
-                ((Test) task).environment(RunUtils.loadEnvironmentFile(getEnvironmentFile().get().getAsFile()));
-            } catch (IOException e) {
-                throw new UncheckedIOException("Failed to read prepared test environment", e);
-            }
-        }
     }
 }

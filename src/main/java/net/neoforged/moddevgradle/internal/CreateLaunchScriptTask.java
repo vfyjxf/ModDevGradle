@@ -51,9 +51,6 @@ abstract class CreateLaunchScriptTask extends DefaultTask {
     @InputFile
     abstract Property<String> getProgramArgsFile();
 
-    @InputFile
-    abstract Property<String> getEnvironmentFile();
-
     /**
      * This argument file is only used by the launch shell-scripts.
      */
@@ -123,10 +120,8 @@ abstract class CreateLaunchScriptTask extends DefaultTask {
         }
     }
 
-    private Map<String, String> getMergedEnvironment() throws IOException {
-        var environment = new java.util.LinkedHashMap<>(RunUtils.loadEnvironmentFile(new File(getEnvironmentFile().get())));
-        environment.putAll(getEnvironment().get());
-        return environment;
+    private Map<String, String> getMergedEnvironment() {
+        return new java.util.LinkedHashMap<>(getEnvironment().get());
     }
 
     private static List<String> createJavaCommand(

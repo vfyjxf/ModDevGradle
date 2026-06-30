@@ -35,6 +35,7 @@ import net.neoforged.moddevgradle.legacyforge.internal.MinecraftMappings;
 import net.neoforged.moddevgradle.legacyforge.internal.NonStrictDependencyTransform;
 import net.neoforged.moddevgradle.mcpforge.dsl.McpForgeExtension;
 import net.neoforged.nfrtgradle.CreateMinecraftArtifacts;
+import net.neoforged.nfrtgradle.DownloadedAssetsReference;
 import net.neoforged.nfrtgradle.NeoFormRuntimeExtension;
 import net.neoforged.nfrtgradle.NeoFormRuntimePlugin;
 import org.gradle.api.InvalidUserCodeException;
@@ -286,6 +287,23 @@ public class McpForgeModDevPlugin implements Plugin<Project> {
             if ("1.12.2".equals(versionCapabilities.minecraftVersion())) {
                 run.getSystemProperties().put("fml.ignorePatchDiscrepancies", "true");
                 run.getSystemProperties().put("fml.ignoreInvalidMinecraftCertificates", "true");
+
+                // Set the legacy launch environment variables directly via Providers.
+                // These are what launchwrapper/FML/legacydev read at runtime (MOD_CLASSES is set by the workflow).
+                run.getEnvironment().put("FORGE_GROUP", "net.minecraftforge");
+                run.getEnvironment().put("FORGE_VERSION", settings.getForgeVersion().substring(settings.getForgeVersion().indexOf('-') + 1));
+                run.getEnvironment().put("MC_VERSION", versionCapabilities.minecraftVersion());
+                run.getEnvironment().put("mainClass", "net.minecraft.launchwrapper.Launch");
+                run.getEnvironment().put("tweakClass", run.getType().map(t -> "server".equals(t)
+                        ? "net.minecraftforge.fml.common.launcher.FMLServerTweaker"
+                        : "net.minecraftforge.fml.common.launcher.FMLTweaker"));
+                run.getEnvironment().put("nativesDirectory",
+                        run.getGameDirectory().map(d -> d.dir("natives").getAsFile().getAbsolutePath()));
+                run.getEnvironment().put("MCP_TO_SRG", intermediateToNamed.map(f -> f.getAsFile().getAbsolutePath()));
+                run.getEnvironment().put("MCP_MAPPINGS", mappingsCsv.map(f -> f.getAsFile().getAbsolutePath()));
+                var assetProps = project.getLayout().getBuildDirectory().file("moddev/minecraft_assets.properties");
+                run.getEnvironment().put("assetIndex", assetProps.map(f -> DownloadedAssetsReference.loadProperties(f.getAsFile()).assetIndex()));
+                run.getEnvironment().put("assetDirectory", assetProps.map(f -> DownloadedAssetsReference.loadProperties(f.getAsFile()).assetsRoot()));
             }
 
             if (!versionCapabilities.modLocatorRework()) {

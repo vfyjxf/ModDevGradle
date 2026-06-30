@@ -31,9 +31,6 @@ public abstract class RunGameTask extends JavaExec {
     public abstract MapProperty<String, String> getEnvironmentProperty();
 
     @InputFile
-    public abstract RegularFileProperty getEnvironmentFile();
-
-    @InputFile
     public abstract RegularFileProperty getVmArgsFile();
 
     @InputFile
@@ -55,11 +52,6 @@ public abstract class RunGameTask extends JavaExec {
             throw new UncheckedIOException("Failed to create run directory", e);
         }
 
-        try {
-            getEnvironment().putAll(RunUtils.loadEnvironmentFile(getEnvironmentFile().get().getAsFile()));
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read prepared run environment", e);
-        }
         getEnvironment().putAll(getEnvironmentProperty().get());
 
         classpath(getClasspathProvider());
