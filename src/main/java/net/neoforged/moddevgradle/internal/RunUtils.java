@@ -161,7 +161,6 @@ final class RunUtils {
     public enum RunArgFile {
         VMARGS("runVmArgs.txt"),
         PROGRAMARGS("runProgramArgs.txt"),
-        ENVIRONMENT("runEnvironment.properties"),
         CLASSPATH("runClasspath.txt"),
         LOG4J_CONFIG("log4j2.xml");
 
@@ -174,19 +173,6 @@ final class RunUtils {
 
     public static String getArgFileParameter(RegularFile argFile) {
         return "@" + argFile.getAsFile().getAbsolutePath();
-    }
-
-    public static Map<String, String> loadEnvironmentFile(File file) throws IOException {
-        var properties = new Properties();
-        try (var input = new FileInputStream(file)) {
-            properties.load(input);
-        }
-
-        var environment = new LinkedHashMap<String, String>();
-        for (var name : properties.stringPropertyNames()) {
-            environment.put(name, properties.getProperty(name));
-        }
-        return environment;
     }
 
     public static List<String> readArgFile(File file) throws IOException {

@@ -65,7 +65,6 @@ public class ModDevRunWorkflow {
     private final ModuleDependency testFixturesDependency;
     private final ModuleDependency gameLibrariesDependency;
     private final Configuration userDevConfigOnly;
-    private final Map<String, Provider<String>> runTemplateReplacements;
 
     /**
      * @param gameLibrariesDependency A module dependency that represents the library dependencies of the game.
@@ -81,14 +80,12 @@ public class ModDevRunWorkflow {
             @Nullable ModuleDependency testFixturesDependency,
             ModuleDependency gameLibrariesDependency,
             DomainObjectCollection<RunModel> runs,
-            VersionCapabilitiesInternal versionCapabilities,
-            Map<String, Provider<String>> runTemplateReplacements) {
+            VersionCapabilitiesInternal versionCapabilities) {
         this.project = project;
         this.branding = branding;
         this.modulePathDependency = modulePathDependency;
         this.testFixturesDependency = testFixturesDependency;
         this.gameLibrariesDependency = gameLibrariesDependency;
-        this.runTemplateReplacements = runTemplateReplacements;
 
         var configurations = project.getConfigurations();
 
@@ -146,8 +143,7 @@ public class ModDevRunWorkflow {
                 },
                 configureLegacyClasspath,
                 artifactsWorkflow.downloadAssets().flatMap(DownloadAssets::getAssetPropertiesFile),
-                versionCapabilities,
-                runTemplateReplacements);
+                versionCapabilities);
     }
 
     private static void forbidAdditionalRuntimeDependencies(Configuration configuration, VersionCapabilitiesInternal versionCapabilities) {
@@ -179,14 +175,6 @@ public class ModDevRunWorkflow {
             Branding branding,
             ModDevArtifactsWorkflow artifactsWorkflow,
             DomainObjectCollection<RunModel> runs) {
-        return create(project, branding, artifactsWorkflow, runs, Map.of());
-    }
-
-    public static ModDevRunWorkflow create(Project project,
-            Branding branding,
-            ModDevArtifactsWorkflow artifactsWorkflow,
-            DomainObjectCollection<RunModel> runs,
-            Map<String, Provider<String>> runTemplateReplacements) {
         var dependencies = artifactsWorkflow.dependencies();
         var versionCapabilites = artifactsWorkflow.versionCapabilities();
 
@@ -199,8 +187,7 @@ public class ModDevRunWorkflow {
                 dependencies.testFixturesDependency(),
                 dependencies.gameLibrariesDependency(),
                 runs,
-                versionCapabilites,
-                runTemplateReplacements);
+                versionCapabilites);
 
         project.getExtensions().add(EXTENSION_NAME, workflow);
 
@@ -250,8 +237,7 @@ public class ModDevRunWorkflow {
                         }
                     },
                     artifactsWorkflow.downloadAssets().flatMap(DownloadAssets::getAssetPropertiesFile),
-                    artifactsWorkflow.versionCapabilities(),
-                    runTemplateReplacements);
+                    artifactsWorkflow.versionCapabilities());
         }
     }
 
@@ -271,8 +257,7 @@ public class ModDevRunWorkflow {
             Consumer<Configuration> configureModulePath,
             Consumer<Configuration> configureLegacyClasspath,
             Provider<RegularFile> assetPropertiesFile,
-            VersionCapabilitiesInternal versionCapabilities,
-            Map<String, Provider<String>> runTemplateReplacements) {
+            VersionCapabilitiesInternal versionCapabilities) {
         var dependencyFactory = project.getDependencyFactory();
         var ideIntegration = IdeIntegration.of(project, branding);
 
@@ -309,7 +294,6 @@ public class ModDevRunWorkflow {
                     assetPropertiesFile,
                     devLaunchConfig,
                     versionCapabilities,
-                    runTemplateReplacements,
                     createLaunchScriptsTask);
             prepareRunTasks.put(run, prepareRunTask);
         });
@@ -333,7 +317,6 @@ public class ModDevRunWorkflow {
             Provider<RegularFile> assetPropertiesFile,
             Configuration devLaunchConfig,
             VersionCapabilitiesInternal versionCapabilities,
-            Map<String, Provider<String>> runTemplateReplacements,
             TaskProvider<Task> createLaunchScriptsTask) {
         var ideIntegration = IdeIntegration.of(project, branding);
         var configurations = project.getConfigurations();
@@ -503,8 +486,7 @@ public class ModDevRunWorkflow {
             Consumer<Configuration> configureModulePath,
             Consumer<Configuration> configureLegacyClasspath,
             Provider<RegularFile> assetPropertiesFile,
-            VersionCapabilitiesInternal versionCapabilities,
-            Map<String, Provider<String>> runTemplateReplacements) {
+            VersionCapabilitiesInternal versionCapabilities) {
         var gameDirectory = new File(project.getProjectDir(), JUNIT_GAME_DIR);
 
         var ideIntegration = IdeIntegration.of(project, branding);
@@ -552,7 +534,6 @@ public class ModDevRunWorkflow {
 
         var vmArgsFile = runArgsDir.map(dir -> dir.file("vmArgs.txt"));
         var programArgsFile = runArgsDir.map(dir -> dir.file("programArgs.txt"));
-        var environmentFile = runArgsDir.map(dir -> dir.file("environment.properties"));
         var log4j2ConfigFile = runArgsDir.map(dir -> dir.file("log4j2.xml"));
         var prepareTask = tasks.register("prepareNeoForgeTestFiles", PrepareTest.class, task -> {
             task.setGroup(branding.internalTaskGroup());

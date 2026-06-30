@@ -42,8 +42,7 @@ public final class NeoDevFacade {
                 configureModulePath,
                 configureAdditionalClasspath,
                 assetPropertiesFile,
-                neoFormVersion.map(VersionCapabilitiesInternal::ofNeoFormVersion).getOrElse(VersionCapabilitiesInternal.latest()),
-                Map.of());
+                neoFormVersion.map(VersionCapabilitiesInternal::ofNeoFormVersion).getOrElse(VersionCapabilitiesInternal.latest()));
     }
 
     public static void setupTestTask(Project project,
@@ -67,8 +66,7 @@ public final class NeoDevFacade {
                 configureModulePath,
                 configureAdditionalClasspath,
                 assetPropertiesFile,
-                neoFormVersion.map(VersionCapabilitiesInternal::ofNeoFormVersion).getOrElse(VersionCapabilitiesInternal.latest()),
-                Map.of());
+                neoFormVersion.map(VersionCapabilitiesInternal::ofNeoFormVersion).getOrElse(VersionCapabilitiesInternal.latest()));
     }
 
     public static void runTaskOnProjectSync(Project project, Object task) {

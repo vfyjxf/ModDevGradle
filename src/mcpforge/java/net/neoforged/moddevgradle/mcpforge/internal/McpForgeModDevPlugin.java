@@ -274,10 +274,7 @@ public class McpForgeModDevPlugin implements Plugin<Project> {
                 project,
                 Branding.MDG,
                 artifacts,
-                extension.getRuns(),
-                Map.of(
-                        "mcp_to_srg", intermediateToNamed.map(file -> file.getAsFile().getAbsolutePath()),
-                        "mcp_mappings", mappingsCsv.map(file -> file.getAsFile().getAbsolutePath())));
+                extension.getRuns());
 
         extension.getRuns().configureEach(run -> {
             // Old BSL versions before 2022 did not export any packages, blocking DevLaunch from the main method.

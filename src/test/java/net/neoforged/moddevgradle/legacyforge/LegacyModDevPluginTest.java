@@ -174,46 +174,6 @@ public class LegacyModDevPluginTest extends AbstractProjectBuilderTest {
     }
 
     @Test
-    void testLegacyMcpMappingsCanBeConfiguredForNeoFormRuntime() {
-        project.getExtensions().configure(net.neoforged.nfrtgradle.NeoFormRuntimeExtension.class, nfrt -> nfrt.getVersion().set("2.0.19-legacy"));
-
-        extension.enable(settings -> {
-            settings.setForgeVersion("1.12.2-14.23.5.2860");
-            settings.setMcpMappings("de.oceanlabs.mcp:mcp_stable:39-1.12@zip");
-        });
-
-        var createArtifacts = project.getTasks().named("createMinecraftArtifacts", CreateMinecraftArtifacts.class).get();
-        assertEquals("de.oceanlabs.mcp:mcp_stable:39-1.12@zip", createArtifacts.getLegacyMcpMappings().get());
-    }
-
-    @Test
-    void testGradleTestTaskLoadsPreparedEnvironmentFile() throws Exception {
-        project.getExtensions().configure(net.neoforged.nfrtgradle.NeoFormRuntimeExtension.class, nfrt -> nfrt.getVersion().set("2.0.19-legacy"));
-        extension.setVersion("1.12.2-14.23.5.2860");
-        var testTask = project.getTasks().named("test", org.gradle.api.tasks.testing.Test.class).get();
-        var initialActionCount = testTask.getActions().size();
-
-        ModDevRunWorkflow.get(project).configureTesting(project.provider(() -> null), project.provider(() -> Set.of()));
-
-        assertThat(testTask.getActions()).hasSizeGreaterThan(initialActionCount);
-
-        var environmentFile = project.getLayout().getBuildDirectory()
-                .file("moddev/junit/environment.properties")
-                .get()
-                .getAsFile()
-                .toPath();
-        Files.createDirectories(environmentFile.getParent());
-        Files.writeString(environmentFile, "MCP_TO_SRG=prepared.srg\n", StandardCharsets.ISO_8859_1);
-
-        var loadEnvironment = project.getObjects().newInstance(ModDevRunWorkflow.LoadPreparedTestEnvironment.class);
-        loadEnvironment.getEnvironmentFile().set(project.getLayout().getBuildDirectory().file("moddev/junit/environment.properties"));
-        loadEnvironment.execute(testTask);
-
-        assertThat(testTask.getEnvironment())
-                .containsEntry("MCP_TO_SRG", "prepared.srg");
-    }
-
-    @Test
     void testForge1122RequiresLegacyNeoFormRuntimeSupport() {
         var e = assertThrows(InvalidUserCodeException.class, () -> extension.setVersion("1.12.2-14.23.5.2860"));
 
